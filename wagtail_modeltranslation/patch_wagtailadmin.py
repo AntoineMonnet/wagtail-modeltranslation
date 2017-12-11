@@ -96,6 +96,7 @@ class WagtailTranslator(object):
         model.get_site_root_paths = _new_get_site_root_paths
         model.relative_url = _new_relative_url
         model.url = _new_url
+        model._get_all_urls = _get_all_urls
         _patch_clean(model)
 
     def _patch_other_models(self, model):
@@ -386,6 +387,14 @@ def _validate_slugs(page):
     trans_real.activate(current_language)
 
     return errors
+
+
+def _get_all_urls(self):
+    urls = []
+    for language in mt_settings.AVAILABLE_LANGUAGES:
+        trans_real.activate(language)
+        urls.append(self.full_url)
+    return urls
 
 
 def _patch_clean(model):
