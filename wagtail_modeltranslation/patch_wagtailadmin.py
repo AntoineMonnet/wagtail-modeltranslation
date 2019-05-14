@@ -4,6 +4,7 @@ import logging
 
 from django.core.exceptions import ValidationError
 from django.core.urlresolvers import reverse
+from django.core.cache import cache
 from django.db import transaction
 from django.http import Http404
 from django.utils.translation import trans_real
@@ -94,7 +95,7 @@ class WagtailTranslator(object):
         model.set_url_path = _new_set_url_path
         model.route = _new_route
         model.get_site_root_paths = _new_get_site_root_paths
-        model.relative_url = _new_relative_url
+        #model.relative_url = _new_relative_url
         model.url = _new_url
         model._get_all_urls = _get_all_urls
         _patch_clean(model)
@@ -298,23 +299,37 @@ def _new_route(self, request, path_components):
             raise Http404
 
 
-@staticmethod
-def _new_get_site_root_paths():
+def _localized_site_get_site_root_paths():
     """
-    Return a list of (root_path, root_url) tuples, most specific path first -
-    used to translate url_paths into actual URLs with hostnames
-
-    Same method as Site.get_site_root_paths() but without cache
-
-    TODO: remake this method with cache and think of his integration in
-    Site.get_site_root_paths()
+    Localized version of ``Site.get_site_root_paths()``
     """
-    result = [
-        (site.id, site.root_page.specific.url_path, site.root_url)
-        for site in Site.objects.select_related('root_page').order_by('-root_page__url_path')
-    ]
+    current_language = get_language()
+    cache_key = 'wagtail_site_root_paths_{}'.format(current_language)
+    result = cache.get(cache_key)
+
+    if result is None:
+        result = [
+            (site.id, site.root_page.url_path, site.root_url)
+            for site in Site.objects.select_related('root_page').order_by('-root_page__url_path')
+        ]
+        cache.set(cache_key, result, 300)
 
     return result
+
+def _new_get_site_root_paths(self, request=None):
+    """
+    Return localized site_root_paths, using the cached copy on the
+    request object if available and if language is the same.
+    """
+    # if we have a request, use that to cache site_root_paths; otherwise, use self
+    current_language = get_language()
+    cache_object = request if request else self
+    if not hasattr(cache_object, '_wagtail_cached_site_root_paths_language') or \
+            cache_object._wagtail_cached_site_root_paths_language != current_language:
+        cache_object._wagtail_cached_site_root_paths_language = current_language
+        cache_object._wagtail_cached_site_root_paths = _localized_site_get_site_root_paths()
+
+    return cache_object._wagtail_cached_site_root_paths
 
 
 def _new_relative_url(self, current_site, request=None):
