@@ -25,6 +25,10 @@ class TestSlugPage2(WagtailPage):
     pass
 
 
+class TestSlugPage1Subclass(TestSlugPage1):
+    pass
+
+
 class PatchTestPage(WagtailPage):
     description = models.CharField(max_length=50)
 
