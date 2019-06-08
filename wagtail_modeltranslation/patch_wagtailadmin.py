@@ -104,6 +104,8 @@ class WagtailTranslator(object):
         model.route = _new_route
         model.get_site_root_paths = _new_get_site_root_paths
         #model.relative_url = _new_relative_url
+        model._get_sitemap_urls = model.get_sitemap_urls
+        model.get_sitemap_urls = _new_get_sitemap_urls
         model.url = _new_url
         model._get_all_urls = _get_all_urls
         _patch_clean(model)
@@ -351,6 +353,32 @@ def _new_relative_url(self, current_site, request=None):
         if self.url_path.startswith(root_path):
             return ('' if current_site.id == id else root_url) + reverse('wagtail_serve',
                                                                          args=(self.specific.url_path[len(root_path):],))
+
+def _new_get_sitemap_urls(self, request=None):
+
+    if not getattr(self, 'has_page', 'True'):
+        return []
+
+    for (id, root_path, root_url) in self.get_site_root_paths():
+        if self.url_path.startswith(root_path):
+
+            translations = []
+            for language in mt_settings.AVAILABLE_LANGUAGES:
+                trans_real.activate(language)
+                translations.append(dict(lang=language, url=self.full_url))
+
+            #return ('' if current_site.id == id else root_url) + reverse('wagtail_serve',
+            #                                                             args=(self.specific.url_path[len(root_path):],))
+            return [
+                {
+                    'location': root_url + self.specific.url_path[len(root_path)-1:],
+                    # fall back on latest_revision_created_at if last_published_at is null
+                    # (for backwards compatibility from before last_published_at was added)
+                    'lastmod': (self.last_published_at or self.latest_revision_created_at),
+                    'translations': translations
+                }
+            ]
+    return []
 
 
 @property
